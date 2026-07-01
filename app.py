@@ -24,6 +24,7 @@ from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator
 
 from data_sources import fetch_intraday_data_alpaca, fetch_news_alpaca
+from glossary import GLOSSARY
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -34,6 +35,30 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+CUSTOM_CSS = """
+<style>
+[data-testid="stMetric"] {
+    background: linear-gradient(160deg, #161B26 0%, #12172200 100%);
+    border: 1px solid #262D3D;
+    border-left: 3px solid #F5A623;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+[data-testid="stMetricLabel"] { color: #8B93A7; }
+[data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+h1 {
+    background: linear-gradient(90deg, #F5A623 0%, #26A69A 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800 !important;
+}
+.stTabs [data-baseweb="tab"] { font-weight: 600; padding: 8px 18px; }
+.stTabs [aria-selected="true"] { border-bottom: 3px solid #F5A623 !important; }
+div[data-testid="stSidebarContent"] { border-right: 1px solid #262D3D; }
+</style>
+"""
 
 EASTERN = "America/New_York"  # canonical IANA key ("US/Eastern" is a legacy alias)
 CHOP_START = dt.time(11, 30)   # Midday chop zone start (ET)
@@ -459,6 +484,9 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
             )
 
     fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=height,
         xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
@@ -478,6 +506,7 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
 
 
 def main() -> None:
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     st.title("📈 Jawain's Trading Strategy")
     st.caption(
         "0DTE SPY signal engine — VWAP/RSI trend-following on 1-minute bars. "
@@ -709,70 +738,105 @@ def main() -> None:
                 )
                 break
 
-    # ---------------------- Chart ------------------------------------------
+    # ---------------------- Tabbed content ---------------------------------
     orh, orl = opening_range(df) if show_orb else (None, None)
-    st.plotly_chart(
-        build_chart(df, show_smas, shade_chop, orh, orl,
-                    levels=levels or None,
-                    height=chart_height, tf_label=tf_label),
-        use_container_width=True,
+    tab_chart, tab_outcomes, tab_news, tab_dict = st.tabs(
+        ["📊 Chart", "🎯 Outcomes", "📰 News", "📖 Dictionary"]
     )
 
-    # ---------------------- Signal log -------------------------------------
-    st.subheader("📋 Signal Log")
-    signal_rows = df[df["Call_Signal"] | df["Put_Signal"]].copy()
-    if signal_rows.empty:
-        st.write("No signals triggered under the current parameters.")
-    else:
-        log = pd.DataFrame(
-            {
-                "Time (ET)": signal_rows.index.strftime("%Y-%m-%d %H:%M"),
-                "Signal": np.where(signal_rows["Call_Signal"], "🟢 CALL", "🔴 PUT"),
-                "Price": signal_rows["Close"].round(2),
-                "VWAP": signal_rows["VWAP"].round(2),
-                "RSI": signal_rows["RSI"].round(1),
-                "Fast SMA": signal_rows["SMA_Fast"].round(2),
-                "Slow SMA": signal_rows["SMA_Slow"].round(2),
-            }
-        ).iloc[::-1]  # newest first
-        st.dataframe(log, use_container_width=True, hide_index=True)
+    with tab_chart:
+        st.plotly_chart(
+            build_chart(df, show_smas, shade_chop, orh, orl,
+                        levels=levels or None,
+                        height=chart_height, tf_label=tf_label),
+            use_container_width=True,
+        )
 
-    if not compact:
-        with st.expander("🔍 Raw data (last 50 bars)"):
-            st.dataframe(df.tail(50), use_container_width=True)
+        st.subheader("📋 Signal Log")
+        signal_rows = df[df["Call_Signal"] | df["Put_Signal"]].copy()
+        if signal_rows.empty:
+            st.write("No signals triggered under the current parameters.")
+        else:
+            log = pd.DataFrame(
+                {
+                    "Time (ET)": signal_rows.index.strftime("%Y-%m-%d %H:%M"),
+                    "Signal": np.where(signal_rows["Call_Signal"], "🟢 CALL", "🔴 PUT"),
+                    "Price": signal_rows["Close"].round(2),
+                    "VWAP": signal_rows["VWAP"].round(2),
+                    "RSI": signal_rows["RSI"].round(1),
+                    "Fast SMA": signal_rows["SMA_Fast"].round(2),
+                    "Slow SMA": signal_rows["SMA_Slow"].round(2),
+                }
+            ).iloc[::-1]
+            st.dataframe(log, use_container_width=True, hide_index=True)
 
-    # ---------------------- Signal outcome tracker -------------------------
-    st.subheader("🎯 Signal Outcomes")
-    st.caption(
-        "How SPY moved after each historical signal in the loaded window. "
-        "'Favorable' means the underlying moved in the signal's direction. "
-        "This measures signal quality only — NOT option P&L (theta decay and "
-        "IV changes are excluded). Use it to tune the sliders with evidence."
-    )
-    outcomes = compute_signal_outcomes(df, tf_minutes)
-    if outcomes.empty:
-        st.write("No completed signals to evaluate yet. Raise the lookback "
-                 "slider to include prior sessions for a bigger sample.")
-    else:
-        st.dataframe(outcomes, use_container_width=True, hide_index=True)
-        if (outcomes["Signals"] < 20).all():
-            st.caption("⚠️ Small sample — treat these percentages as noisy "
-                       "until you have 20+ signals per row.")
+        if not compact:
+            with st.expander("🔍 Raw data (last 50 bars)"):
+                st.dataframe(df.tail(50), use_container_width=True)
 
-    # ---------------------- Market news ------------------------------------
-    st.subheader("📰 SPY Market News")
-    st.caption("Benzinga headlines via Alpaca's free News API · refreshes "
-               "every ~2 minutes. Headlines are context, not signals.")
-    news = fetch_news_alpaca("SPY", limit=8)
-    if not news:
-        st.write("No headlines available — check that your Alpaca keys are "
-                 "set in Streamlit secrets.")
-    else:
-        for item in news:
-            line = f"**{item['time']}** — [{item['headline']}]({item['url']})" \
-                   if item["url"] else f"**{item['time']}** — {item['headline']}"
-            st.markdown(f"{line}  \n<span style='color:gray;font-size:0.8em'>"
-                        f"{item['source']}</span>", unsafe_allow_html=True)
+    with tab_outcomes:
+        st.subheader("🎯 Signal Outcomes")
+        st.caption(
+            "How SPY moved after each historical signal in the loaded window. "
+            "'Favorable' means the underlying moved in the signal's direction. "
+            "This measures signal quality only — NOT option P&L (theta decay "
+            "and IV changes are excluded). Use it to tune the sliders with "
+            "evidence."
+        )
+        outcomes = compute_signal_outcomes(df, tf_minutes)
+        if outcomes.empty:
+            st.write("No completed signals to evaluate yet. Raise the lookback "
+                     "slider to include prior sessions for a bigger sample.")
+        else:
+            st.dataframe(outcomes, use_container_width=True, hide_index=True)
+            if (outcomes["Signals"] < 20).all():
+                st.caption("⚠️ Small sample — treat these percentages as noisy "
+                           "until you have 20+ signals per row.")
+
+    with tab_news:
+        st.subheader("📰 SPY Market News")
+        st.caption("Benzinga headlines via Alpaca's free News API · refreshes "
+                   "every ~2 minutes. Headlines are context, not signals.")
+        news = fetch_news_alpaca("SPY", limit=8)
+        if not news:
+            st.write("No headlines available — check that your Alpaca keys "
+                     "are set in Streamlit secrets.")
+        else:
+            for item in news:
+                line = (f"**{item['time']}** — [{item['headline']}]({item['url']})"
+                        if item["url"] else
+                        f"**{item['time']}** — {item['headline']}")
+                st.markdown(f"{line}  \n<span style='color:gray;font-size:0.8em'>"
+                            f"{item['source']}</span>", unsafe_allow_html=True)
+
+    with tab_dict:
+        st.subheader("📖 Options Dictionary")
+        st.caption("Key terms for a 0DTE trader, written around how this "
+                   "dashboard uses them. Type to filter.")
+        query = st.text_input("Search terms", placeholder="e.g. theta, VWAP, chop",
+                              label_visibility="collapsed")
+        q = query.strip().lower()
+        matches = {
+            term: (cat, definition)
+            for term, (cat, definition) in GLOSSARY.items()
+            if not q or q in term.lower() or q in definition.lower()
+               or q in cat.lower()
+        }
+        if not matches:
+            st.write(f"No terms match '{query}'. Try a shorter word, or ask "
+                     "Claude to add it to glossary.py.")
+        else:
+            st.caption(f"{len(matches)} of {len(GLOSSARY)} terms")
+            categories = ["Indicators", "Greeks", "Options basics",
+                          "Execution & risk", "Market structure"]
+            for cat in categories:
+                cat_terms = {t: d for t, (c, d) in matches.items() if c == cat}
+                if not cat_terms:
+                    continue
+                st.markdown(f"**{cat}**")
+                for term in sorted(cat_terms):
+                    with st.expander(term, expanded=bool(q)):
+                        st.write(cat_terms[term])
 
 
 if __name__ == "__main__":
