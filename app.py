@@ -89,6 +89,20 @@ def fetch_intraday_data(ticker: str = "SPY", lookback_days: int = 1) -> pd.DataF
     return df
 
 
+def resample_bars(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
+    """
+    Aggregate 1-minute bars into N-minute candles. Buckets align to the
+    9:30 ET open (9:30 sits on both 5- and 30-minute boundaries).
+    """
+    if minutes <= 1 or df.empty:
+        return df
+    out = df.resample(f"{minutes}min").agg(
+        {"Open": "first", "High": "max", "Low": "min",
+         "Close": "last", "Volume": "sum"}
+    ).dropna(subset=["Close"])
+    return out[out["Volume"] > 0]
+
+
 # ---------------------------------------------------------------------------
 # 2. TECHNICAL INDICATOR ENGINE
 # ---------------------------------------------------------------------------
@@ -200,13 +214,16 @@ def generate_signals(
 
 
 def compute_signal_outcomes(
-    df: pd.DataFrame, horizons: tuple = (5, 10, 15)
+    df: pd.DataFrame, tf_minutes: int = 1
 ) -> pd.DataFrame:
     """
-    For every historical signal, measure SPY's move N minutes later.
-    'Favorable' = underlying moved in the signal's direction. This is a proxy
-    for signal quality, NOT option P&L (theta decay and IV are excluded).
+    For every historical signal, measure SPY's move at horizons appropriate
+    to the chart timeframe (converted from minutes to bars). 'Favorable' =
+    underlying moved in the signal's direction. Proxy for signal quality,
+    NOT option P&L (theta decay and IV are excluded).
     """
+    horizon_map = {1: (5, 10, 15), 5: (5, 15, 30), 30: (30, 60, 90)}
+    horizons_min = horizon_map.get(tf_minutes, (5, 10, 15))
     rows = []
     for label, mask, direction in (
         ("🟢 Call", df["Call_Signal"], 1),
@@ -214,15 +231,16 @@ def compute_signal_outcomes(
     ):
         if not mask.any():
             continue
-        for h in horizons:
-            fwd = (df["Close"].shift(-h) - df["Close"]) * direction
+        for h_min in horizons_min:
+            h_bars = max(1, h_min // tf_minutes)
+            fwd = (df["Close"].shift(-h_bars) - df["Close"]) * direction
             moves = fwd[mask].dropna()
             if moves.empty:
                 continue
             rows.append(
                 {
                     "Signal": label,
-                    "Horizon": f"+{h} min",
+                    "Horizon": f"+{h_min} min",
                     "Signals": len(moves),
                     "Favorable %": round(100 * (moves > 0).mean(), 1),
                     "Avg move ($)": round(moves.mean(), 3),
@@ -297,7 +315,8 @@ def relative_volume(df: pd.DataFrame) -> float | None:
 # ---------------------------------------------------------------------------
 def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
                 orh: float = None, orl: float = None,
-                levels: dict = None, height: int = 760) -> go.Figure:
+                levels: dict = None, height: int = 760,
+                tf_label: str = "1 min") -> go.Figure:
     """Interactive Plotly chart: candles, VWAP, SMAs, RSI pane, signal markers."""
     fig = make_subplots(
         rows=2,
@@ -305,7 +324,7 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
         shared_xaxes=True,
         row_heights=[0.72, 0.28],
         vertical_spacing=0.04,
-        subplot_titles=("SPY — 1-Minute Price Action", "RSI"),
+        subplot_titles=(f"SPY — {tf_label} Price Action", "RSI"),
     )
 
     # Price candles
@@ -485,6 +504,16 @@ def main() -> None:
             ),
         )
 
+        tf_label = st.radio(
+            "Chart timeframe",
+            ["1 min", "5 min", "30 min"],
+            index=0, horizontal=True,
+            help="5 and 30 min candles are aggregated from 1-minute bars. "
+                 "Higher timeframes need a longer lookback to feed the "
+                 "indicators — the app will warn if bars are too few.",
+        )
+        tf_minutes = int(tf_label.split()[0])
+
         lookback_days = st.slider("Lookback (trading days)", 1, 5, 1,
                                   help="yfinance caps 1-minute bars at ~7 calendar days.")
 
@@ -566,6 +595,15 @@ def main() -> None:
             "Streamlit secrets if using an Alpaca feed, and try Refresh."
         )
         st.stop()
+
+    raw = resample_bars(raw, tf_minutes)
+    min_bars = slow_sma + rsi_period
+    if len(raw) < min_bars:
+        st.warning(
+            f"Only {len(raw)} bars at {tf_minutes}-min — the slow SMA and RSI "
+            f"need ~{min_bars} to warm up. Raise the lookback slider "
+            "(a 30-min chart wants 3–5 days)."
+        )
 
     df = compute_indicators(raw, rsi_period, fast_sma, slow_sma)
     df = generate_signals(
@@ -676,7 +714,7 @@ def main() -> None:
     st.plotly_chart(
         build_chart(df, show_smas, shade_chop, orh, orl,
                     levels=levels or None,
-                    height=chart_height),
+                    height=chart_height, tf_label=tf_label),
         use_container_width=True,
     )
 
@@ -711,7 +749,7 @@ def main() -> None:
         "This measures signal quality only — NOT option P&L (theta decay and "
         "IV changes are excluded). Use it to tune the sliders with evidence."
     )
-    outcomes = compute_signal_outcomes(df)
+    outcomes = compute_signal_outcomes(df, tf_minutes)
     if outcomes.empty:
         st.write("No completed signals to evaluate yet. Raise the lookback "
                  "slider to include prior sessions for a bigger sample.")
