@@ -880,7 +880,8 @@ def main() -> None:
                   src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
                   async>
           {{
-            "autosize": true,
+            "width": "100%",
+            "height": {tv_height - 20},
             "symbol": "AMEX:SPY",
             "interval": "{tf_minutes}",
             "timezone": "America/New_York",
