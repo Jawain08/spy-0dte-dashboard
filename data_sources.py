@@ -30,12 +30,15 @@ Feeds
 """
 
 import datetime as dt
-
 import pandas as pd
 import streamlit as st
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+
+# New imports for the 0DTE Option Engine
+from alpaca.data.historical.option import OptionHistoricalDataClient
+from alpaca.data.requests import OptionSnapshotRequest
 
 EASTERN = "America/New_York"
 MARKET_OPEN = dt.time(9, 30)
@@ -137,3 +140,74 @@ def fetch_news_alpaca(symbol: str = "SPY", limit: int = 8) -> list:
         return items
     except Exception:
         return []
+
+
+@st.cache_data(ttl=2, show_spinner=False)
+def fetch_atm_0dte_contract(
+    underlying_price: float, 
+    option_type: str = "C",
+    ticker: str = "SPY"
+) -> dict:
+    """
+    Calculates the closest At-The-Money strike (0.50 Delta proxy) for today's 0DTE expiration,
+    constructs the OCC format string, and queries Alpaca for the live bid, ask, and spread.
+    
+    Parameters:
+    -----------
+    underlying_price : float
+        The most recent close/last price of the underlying asset (e.g., SPY).
+    option_type : str
+        'C' for Calls (breakout strategy), 'P' for Puts (breakdown strategy).
+    ticker : str
+        The underlying asset symbol. Defaults to 'SPY'.
+    """
+    try:
+        options_client = OptionHistoricalDataClient(
+            api_key=st.secrets["ALPACA_API_KEY"],
+            secret_key=st.secrets["ALPACA_SECRET_KEY"],
+        )
+    except KeyError:
+        return {"error": "Alpaca keys missing from Streamlit secrets."}
+
+    try:
+        # 1. Format today's date structure for standard OCC formatting (YYMMDD)
+        today_str = dt.datetime.now(tz=pd.Timestamp.now(tz=EASTERN).tz).strftime("%y%m%d")
+        
+        # 2. Derive the closest ATM strike price (SPY trades in $1 increments)
+        atm_strike = round(underlying_price)
+        
+        # 3. Format strike to explicit 8-character OCC specification (e.g., 545 -> 00545000)
+        strike_formatted = f"{int(atm_strike * 1000):08d}"
+        
+        # 4. Assemble standard OCC option symbol string
+        occ_symbol = f"{ticker.ljust(6)}{today_str}{option_type}{strike_formatted}".replace(" ", "")
+        
+        # 5. Execute snapshot request for the target contract
+        request = OptionSnapshotRequest(symbol_or_symbols=occ_symbol)
+        snapshot = options_client.get_option_snapshot(request)
+        
+        if not snapshot or occ_symbol not in snapshot:
+            return {"error": f"No active data feed found for contract {occ_symbol}"}
+            
+        contract_data = snapshot[occ_symbol]
+        
+        # Verify active quote packet exists
+        if contract_data.latest_quote is None:
+            return {"error": f"Contract {occ_symbol} has no live quote details."}
+            
+        bid = contract_data.latest_quote.bid_price
+        ask = contract_data.latest_quote.ask_price
+        spread = ask - bid
+        
+        return {
+            "symbol": occ_symbol,
+            "strike": atm_strike,
+            "bid": bid,
+            "ask": ask,
+            "spread": round(spread, 2),
+            "is_liquid": spread <= 0.05,  # Liquid threshold check
+            "error": None
+        }
+        
+    except Exception as err:
+        return {"error": f"Option retrieval failure: {str(err)}"}
