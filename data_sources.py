@@ -36,10 +36,6 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
-# New imports for the 0DTE Option Engine
-from alpaca.data.historical.option import OptionHistoricalDataClient
-from alpaca.data.requests import OptionSnapshotRequest
-
 EASTERN = "America/New_York"
 MARKET_OPEN = dt.time(9, 30)
 MARKET_CLOSE = dt.time(16, 0)
@@ -151,16 +147,16 @@ def fetch_atm_0dte_contract(
     """
     Calculates the closest At-The-Money strike (0.50 Delta proxy) for today's 0DTE expiration,
     constructs the OCC format string, and queries Alpaca for the live bid, ask, and spread.
-    
-    Parameters:
-    -----------
-    underlying_price : float
-        The most recent close/last price of the underlying asset (e.g., SPY).
-    option_type : str
-        'C' for Calls (breakout strategy), 'P' for Puts (breakdown strategy).
-    ticker : str
-        The underlying asset symbol. Defaults to 'SPY'.
+    Safely handles imports inside the function to prevent app-level crashes.
     """
+    # 1. Safely load the Alpaca options modules
+    try:
+        from alpaca.data.historical import OptionHistoricalDataClient
+        from alpaca.data.requests import OptionSnapshotRequest
+    except ImportError as e:
+        return {"error": f"Module missing: {str(e)}. Please check your alpaca-py installation."}
+
+    # 2. Authenticate the client
     try:
         options_client = OptionHistoricalDataClient(
             api_key=st.secrets["ALPACA_API_KEY"],
@@ -169,20 +165,21 @@ def fetch_atm_0dte_contract(
     except KeyError:
         return {"error": "Alpaca keys missing from Streamlit secrets."}
 
+    # 3. Process the option data request
     try:
-        # 1. Format today's date structure for standard OCC formatting (YYMMDD)
+        # Format today's date structure for standard OCC formatting (YYMMDD)
         today_str = dt.datetime.now(tz=pd.Timestamp.now(tz=EASTERN).tz).strftime("%y%m%d")
         
-        # 2. Derive the closest ATM strike price (SPY trades in $1 increments)
+        # Derive the closest ATM strike price (SPY trades in $1 increments)
         atm_strike = round(underlying_price)
         
-        # 3. Format strike to explicit 8-character OCC specification (e.g., 545 -> 00545000)
+        # Format strike to explicit 8-character OCC specification (e.g., 545 -> 00545000)
         strike_formatted = f"{int(atm_strike * 1000):08d}"
         
-        # 4. Assemble standard OCC option symbol string
+        # Assemble standard OCC option symbol string
         occ_symbol = f"{ticker.ljust(6)}{today_str}{option_type}{strike_formatted}".replace(" ", "")
         
-        # 5. Execute snapshot request for the target contract
+        # Execute snapshot request for the target contract
         request = OptionSnapshotRequest(symbol_or_symbols=occ_symbol)
         snapshot = options_client.get_option_snapshot(request)
         
