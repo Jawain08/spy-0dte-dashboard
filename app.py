@@ -350,7 +350,7 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
     day_chg = last_close - session_open
     px_color = "#26a69a" if day_chg >= 0 else "#ef5350"
     arrow = "▲" if day_chg >= 0 else "▼"
-    header = (f"SPY  ${last_close:,.2f}   {arrow} {day_chg:+.2f} "
+    header = (f"<b>SPY  ${last_close:,.2f}</b>   {arrow} {day_chg:+.2f} "
               f"({day_chg / session_open * 100:+.2f}%)  ·  {tf_label}")
 
     fig = make_subplots(
@@ -362,7 +362,7 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
         subplot_titles=(header, "RSI"),
     )
     # Subplot titles are stored as annotations; style the price header (index 0)
-    fig.layout.annotations[0].font = dict(size=17, color=px_color)
+    fig.layout.annotations[0].font = dict(size=24, color=px_color)
     fig.layout.annotations[0].x = 0
     fig.layout.annotations[0].xanchor = "left"
 
@@ -515,7 +515,7 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
         height=height,
         xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-        margin=dict(l=40, r=20, t=60, b=30),
+        margin=dict(l=40, r=78, t=76, b=30),
         hovermode="x unified",
     )
     # Hide overnight gaps between sessions
