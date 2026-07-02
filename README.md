@@ -93,15 +93,21 @@ Every `git push` to `main` auto-redeploys.
 | Chop zone | 11:30 AM – 1:30 PM ET — all signals blocked |
 
 
-## 🆕 Signal-quality & news features
+## 🆕 Features beyond the core signals
 
 | Feature | What it does |
 |---|---|
-| Volume confirmation | Optional filter: signal bar volume must exceed N× the 20-bar average — screens out thin, failure-prone VWAP breaks |
-| Opening range | First-30-min high/low drawn on the chart for confluence with VWAP signals |
-| Signal outcomes | Measures SPY's move 5/10/15 min after every historical signal — favorable %, average move. Proxy for signal quality, NOT option P&L |
-| SPY news panel | Live Benzinga headlines via Alpaca's free News API (same keys), ~2-min refresh |
-| Event-window caution | Warns when within ±15 min of common release slots (8:30 / 10:00 / 2:00 ET) |
+| Live price header | Bold SPY price + day change at the top of the chart, with a dotted last-price tracking line across all levels |
+| ATM 0DTE quotes | Live bid/ask/spread for today's at-the-money call & put with a liquidity badge (Alpaca options feed) |
+| Timeframes | 1 / 5 / 30-minute candles resampled from the 1-minute feed; outcome horizons adjust automatically |
+| Volume confirmation | Optional filter: signal bar volume must exceed N× the 20-bar average |
+| Opening range | First-30-min high/low drawn on the chart |
+| Expected move & key levels | VIX1D-implied EM band, prior-day high/low/close, relative volume, session clock |
+| Signal outcomes | SPY's move 5/10/15 min (timeframe-scaled) after every signal — favorable %, avg move. Signal quality, NOT option P&L |
+| SPY news panel | Benzinga headlines via Alpaca's free News API |
+| Event & final-hour warnings | Cautions near 8:30/10:00/2:00 ET release slots and during the last hour of theta decay |
+| Options dictionary | 42 searchable terms (Greeks, indicators, execution, market structure) in the 📖 tab |
+| Layout modes | Phone (folded) / Unfolded (10-inch) / Desktop — tuned for foldables; dark trading theme |
 
 ## 📡 Data Feeds
 
