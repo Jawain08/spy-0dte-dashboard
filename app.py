@@ -23,7 +23,8 @@ from plotly.subplots import make_subplots
 from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator
 
-from data_sources import fetch_intraday_data_alpaca, fetch_news_alpaca
+from data_sources import (fetch_intraday_data_alpaca, fetch_news_alpaca,
+                          fetch_atm_0dte_contract)
 from glossary import GLOSSARY
 
 # ---------------------------------------------------------------------------
@@ -608,6 +609,12 @@ def main() -> None:
             help="VIX1D-implied expected move band, prior-day high/low/close, "
                  "and relative volume.",
         )
+        show_atm = st.checkbox(
+            "Show ATM 0DTE contract quotes", value=True,
+            help="Live bid/ask/spread for today's at-the-money SPY call and "
+                 "put via Alpaca's options feed. Indicative data — verify on "
+                 "your broker before trading.",
+        )
         shade_chop = st.checkbox("Shade chop zone on chart", value=True)
         show_smas = st.checkbox("Show SMAs on chart", value=True)
 
@@ -761,6 +768,35 @@ def main() -> None:
                     "it are unreliable. Check today's economic calendar."
                 )
                 break
+
+    # ---------------------- ATM 0DTE contract quotes -----------------------
+    if show_atm:
+        now_et = pd.Timestamp.now(tz=EASTERN)
+        if now_et.weekday() >= 5:
+            st.caption("💤 ATM 0DTE quotes: contracts expiring today only "
+                       "exist on trading days.")
+        else:
+            spot = float(df["Close"].iloc[-1])
+            call_q = fetch_atm_0dte_contract(spot, "C")
+            put_q = fetch_atm_0dte_contract(spot, "P")
+
+            def _quote_line(label: str, q: dict) -> str:
+                if q.get("error"):
+                    return f"**{label}** — unavailable ({q['error']})"
+                bid = q.get("bid")
+                ask = q.get("ask")
+                if bid is None or ask is None:
+                    return f"**{label} ${q['strike']}** — no live quote"
+                liq = "🟩 liquid" if q.get("is_liquid") else "🟥 wide spread"
+                return (f"**{label} ${q['strike']}** — bid **${bid:.2f}** / "
+                        f"ask **${ask:.2f}** · spread ${q['spread']:.2f} {liq}")
+
+            qc1, qc2 = st.columns(2)
+            qc1.markdown(_quote_line("🟢 ATM Call", call_q))
+            qc2.markdown(_quote_line("🔴 ATM Put", put_q))
+            st.caption("Today's at-the-money 0DTE contracts · indicative "
+                       "feed, ~2s cache · verify prices on your broker "
+                       "before trading.")
 
     # ---------------------- Tabbed content ---------------------------------
     orh, orl = opening_range(df) if show_orb else (None, None)
