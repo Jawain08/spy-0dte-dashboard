@@ -816,10 +816,10 @@ def main() -> None:
                 bid = q.get("bid")
                 ask = q.get("ask")
                 if bid is None or ask is None:
-                    return f"**{label} ${q['strike']}** — no live quote"
+                    return f"**{label} \\${q['strike']}** — no live quote"
                 liq = "🟩 liquid" if q.get("is_liquid") else "🟥 wide spread"
-                return (f"**{label} ${q['strike']}** — bid **${bid:.2f}** / "
-                        f"ask **${ask:.2f}** · spread ${q['spread']:.2f} {liq}")
+                return (f"**{label} \\${q['strike']}** — bid **\\${bid:.2f}** / "
+                        f"ask **\\${ask:.2f}** · spread \\${q['spread']:.2f} {liq}")
 
             qc1, qc2 = st.columns(2)
             qc1.markdown(_quote_line("🟢 ATM Call", call_q))
@@ -872,10 +872,10 @@ def main() -> None:
             "real-time movement between the signal engine's 30-second "
             "updates. Signals, levels, and outcomes live on the 📊 Chart tab."
         )
-        tv_height = 420 if compact else (560 if chart_height == 620 else 640)
+        tv_height = 520 if compact else (660 if chart_height == 620 else 740)
         tv_config = f"""
         <div class="tradingview-widget-container" style="height:{tv_height}px;width:100%">
-          <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+          <div class="tradingview-widget-container__widget" style="height:{tv_height - 20}px;width:100%"></div>
           <script type="text/javascript"
                   src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
                   async>
