@@ -514,8 +514,8 @@ def build_chart(df: pd.DataFrame, show_smas: bool, shade_chop: bool,
         plot_bgcolor="rgba(0,0,0,0)",
         height=height,
         xaxis_rangeslider_visible=False,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-        margin=dict(l=40, r=78, t=76, b=30),
+        legend=dict(orientation="h", yanchor="top", y=-0.07, x=0),
+        margin=dict(l=40, r=78, t=76, b=80),
         hovermode="x unified",
     )
     # Hide overnight gaps between sessions
