@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 from plotly.subplots import make_subplots
 from ta.momentum import RSIIndicator
@@ -829,8 +830,10 @@ def main() -> None:
 
     # ---------------------- Tabbed content ---------------------------------
     orh, orl = opening_range(df) if show_orb else (None, None)
-    tab_chart, tab_outcomes, tab_news, tab_dict, tab_guide = st.tabs(
-        ["📊 Chart", "🎯 Outcomes", "📰 News", "📖 Dictionary", "🧭 Guide"]
+    (tab_chart, tab_live, tab_outcomes, tab_news, tab_dict,
+     tab_guide) = st.tabs(
+        ["📊 Chart", "⚡ Live", "🎯 Outcomes", "📰 News", "📖 Dictionary",
+         "🧭 Guide"]
     )
 
     with tab_chart:
@@ -862,6 +865,42 @@ def main() -> None:
         if not compact:
             with st.expander("🔍 Raw data (last 50 bars)"):
                 st.dataframe(df.tail(50), use_container_width=True)
+
+    with tab_live:
+        st.caption(
+            "Streaming tick-by-tick chart embedded from TradingView — "
+            "real-time movement between the signal engine's 30-second "
+            "updates. Signals, levels, and outcomes live on the 📊 Chart tab."
+        )
+        tv_height = 420 if compact else (560 if chart_height == 620 else 640)
+        tv_config = f"""
+        <div class="tradingview-widget-container" style="height:{tv_height}px;width:100%">
+          <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+          <script type="text/javascript"
+                  src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
+                  async>
+          {{
+            "autosize": true,
+            "symbol": "AMEX:SPY",
+            "interval": "{tf_minutes}",
+            "timezone": "America/New_York",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "allow_symbol_change": false,
+            "studies": ["STD;VWAP"],
+            "support_host": "https://www.tradingview.com"
+          }}
+          </script>
+        </div>
+        """
+        components.html(tv_config, height=tv_height + 10)
+        st.caption("Data via TradingView's own feed — may differ from the "
+                   "Alpaca IEX prices on the Chart tab by pennies. This tab "
+                   "is for watching motion; the Chart tab is where your "
+                   "signals and levels live.")
 
     with tab_outcomes:
         st.subheader("🎯 Signal Outcomes")
