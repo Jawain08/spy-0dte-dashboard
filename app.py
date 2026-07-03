@@ -561,6 +561,20 @@ def main() -> None:
                  "quote/clock updates. 30 s matches the data cadence.",
         )
 
+        st.subheader("Alerts")
+        enable_alerts = st.checkbox(
+            "In-app signal alerts", value=True,
+            help="Pops a notification when a new call/put signal fires on "
+                 "the latest bar. Works while the app is open — it can't "
+                 "notify a closed phone.",
+        )
+        alert_sound = st.checkbox(
+            "Alert sound", value=True, disabled=not enable_alerts,
+            help="Short beep with the alert (high tone = call, low = put). "
+                 "Browsers may require one tap anywhere on the page first "
+                 "before they allow audio.",
+        )
+
         st.subheader("Data Source")
         data_source = st.radio(
             "Feed",
@@ -783,6 +797,36 @@ def main() -> None:
         st.error("🔴 **IDEAL PUT scenario on the latest bar** — VWAP breakdown with falling RSI.")
     elif last.get("In_Chop_Zone", False):
         st.info("⏸️ Inside the midday chop zone — signals suppressed until 1:30 PM ET.")
+
+    # ---------------------- In-app alerts (toast + sound) ------------------
+    if enable_alerts:
+        sig_type = ("CALL" if last["Call_Signal"]
+                    else "PUT" if last["Put_Signal"] else None)
+        if sig_type:
+            # Dedupe: one alert per signal bar, not one per 30s rerun
+            alert_key = f"{sig_type}-{df.index[-1].isoformat()}"
+            if st.session_state.get("last_alert_key") != alert_key:
+                st.session_state["last_alert_key"] = alert_key
+                icon = "🟢" if sig_type == "CALL" else "🔴"
+                st.toast(
+                    f"{icon} {sig_type} signal — SPY \\${last['Close']:.2f} "
+                    f"vs VWAP \\${last['VWAP']:.2f} · RSI {last['RSI']:.0f}",
+                    icon="🚨",
+                )
+                if alert_sound:
+                    beep_freq = 880 if sig_type == "CALL" else 440
+                    components.html(f"""<script>
+                    try {{
+                      const c = new (window.AudioContext || window.webkitAudioContext)();
+                      const o = c.createOscillator(), g = c.createGain();
+                      o.type = 'sine';
+                      o.frequency.value = {beep_freq};
+                      g.gain.setValueAtTime(0.2, c.currentTime);
+                      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.5);
+                      o.connect(g); g.connect(c.destination);
+                      o.start(); o.stop(c.currentTime + 0.5);
+                    }} catch (e) {{}}
+                    </script>""", height=0)
 
     # Scheduled-event caution: technical signals near macro releases are unreliable
     now_et = pd.Timestamp.now(tz=EASTERN)
@@ -1025,7 +1069,10 @@ def main() -> None:
                 "- 🕒 **Final hour** — theta decay is steepest; long premium "
                 "needs the move *now*.\n"
                 "- ⏸️ **Chop zone** — it's 11:30–1:30 ET and signals are "
-                "suppressed by design."
+                "suppressed by design.\\n"
+                "- 🚨 **Alerts** — a pop-up (and a beep: high tone = call, "
+                "low = put) fires once per new signal bar while the app "
+                "is open. Toggle both in the sidebar."
             )
 
         with st.expander("💰 ATM contract strip"):
