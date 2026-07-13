@@ -555,10 +555,12 @@ def main() -> None:
                  "manual refreshes.",
         )
         refresh_secs = st.select_slider(
-            "Interval (seconds)", options=[15, 30, 60], value=30,
+            "Interval (seconds)", options=[5, 10, 15, 30, 60], value=15,
             disabled=not auto_refresh_on,
-            help="Price data is cached for 30 s, so 15 s mainly speeds up "
-                 "quote/clock updates. 30 s matches the data cadence.",
+            help="How often the whole app re-runs. The price feed refreshes "
+                 "in lockstep down to ~5s. Faster = more responsive but more "
+                 "API calls; SPY 1-min bars only change once a minute anyway, "
+                 "so 5–15s mainly speeds the price readout and quotes.",
         )
 
         st.subheader("Alerts")
@@ -682,10 +684,17 @@ def main() -> None:
                        "— add `streamlit-autorefresh>=1.0.1` to "
                        "requirements.txt and redeploy.")
 
+    # Bucket the data cache to the chosen refresh cadence so price data is as
+    # fresh as the page. e.g. at 5s, the bucket changes every 5s, expiring the
+    # cache in lockstep with the auto-refresh rerun.
+    _bucket_secs = refresh_secs if auto_refresh_on else 30
+    cache_bucket = int(pd.Timestamp.now(tz=EASTERN).timestamp() // _bucket_secs)
+
     # ---------------------- Pipeline ---------------------------------------
     if data_source.startswith("Alpaca"):
         feed = "iex" if "IEX" in data_source else "sip"
-        raw = fetch_intraday_data_alpaca("SPY", lookback_days, feed=feed)
+        raw = fetch_intraday_data_alpaca("SPY", lookback_days, feed=feed,
+                                         cache_bucket=cache_bucket)
         if raw.empty and "ALPACA_API_KEY" not in st.secrets:
             st.warning("Falling back to Yahoo Finance (15-min delayed) until "
                        "Alpaca keys are added to Streamlit secrets.")
