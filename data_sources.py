@@ -41,11 +41,12 @@ MARKET_OPEN = dt.time(9, 30)
 MARKET_CLOSE = dt.time(16, 0)
 
 
-@st.cache_data(ttl=30, show_spinner="Fetching real-time SPY data…")
+@st.cache_data(ttl=5, show_spinner="Fetching real-time SPY data…")
 def fetch_intraday_data_alpaca(
     ticker: str = "SPY",
     lookback_days: int = 1,
     feed: str = "iex",  # "iex" = free real-time; "sip" = paid full tape
+    cache_bucket: int = 0,  # bump from the UI to force a fresh pull; see app.py
 ) -> pd.DataFrame:
     """
     Fetch 1-minute bars from Alpaca and return them in the exact schema
