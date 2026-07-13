@@ -693,8 +693,13 @@ def main() -> None:
     # ---------------------- Pipeline ---------------------------------------
     if data_source.startswith("Alpaca"):
         feed = "iex" if "IEX" in data_source else "sip"
-        raw = fetch_intraday_data_alpaca("SPY", lookback_days, feed=feed,
-                                         cache_bucket=cache_bucket)
+        try:
+            raw = fetch_intraday_data_alpaca("SPY", lookback_days, feed=feed,
+                                             cache_bucket=cache_bucket)
+        except TypeError:
+            # Older data_sources.py without the cache_bucket param (e.g. during
+            # a partial redeploy) — fall back to the basic call so the app runs.
+            raw = fetch_intraday_data_alpaca("SPY", lookback_days, feed=feed)
         if raw.empty and "ALPACA_API_KEY" not in st.secrets:
             st.warning("Falling back to Yahoo Finance (15-min delayed) until "
                        "Alpaca keys are added to Streamlit secrets.")
