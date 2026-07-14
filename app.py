@@ -603,8 +603,12 @@ def main() -> None:
         )
         tf_minutes = int(tf_label.split()[0])
 
-        lookback_days = st.slider("Lookback (trading days)", 1, 5, 1,
-                                  help="yfinance caps 1-minute bars at ~7 calendar days.")
+        lookback_days = st.slider(
+            "Lookback (trading days)", 1, 10, 1,
+            help="How many sessions to load. Raise this to build a bigger "
+                 "sample in the Outcomes tab (aim for 20+ signals per row). "
+                 "1-minute history is capped at roughly the last 7-10 days.",
+        )
 
         st.subheader("Moving Averages")
         fast_sma = st.slider("Fast SMA period", 3, 50, 9)
@@ -715,6 +719,23 @@ def main() -> None:
         st.stop()
 
     raw = resample_bars(raw, tf_minutes)
+
+    # Data readout — makes it obvious when the lookback isn't loading what you
+    # asked for (weekends, holidays, or a feed cap on 1-minute history).
+    _sessions = sorted(set(raw.index.date))
+    _sess_txt = ", ".join(d.strftime("%b %d") for d in _sessions)
+    if len(_sessions) < lookback_days:
+        st.info(
+            f"📅 Loaded **{len(_sessions)} session(s)** ({len(raw)} bars) — "
+            f"asked for {lookback_days}. Sessions: {_sess_txt}. "
+            "1-minute history is capped at roughly the last 7–10 days, and "
+            "weekends/holidays don't count. If this stays at 1, see the "
+            "Alpaca feed note in the README."
+        )
+    else:
+        st.caption(f"📅 Loaded {len(_sessions)} session(s) · {len(raw)} bars · "
+                   f"{_sess_txt}")
+
     min_bars = slow_sma + rsi_period
     if len(raw) < min_bars:
         st.warning(
