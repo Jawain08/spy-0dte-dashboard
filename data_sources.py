@@ -64,7 +64,12 @@ def fetch_intraday_data_alpaca(
         )
         return pd.DataFrame()
 
-    start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=max(1, lookback_days))
+    # Trading days -> calendar days: every 5 trading days spans ~7 calendar
+    # days, so asking for `lookback_days` literally loses a weekend. Pad it,
+    # then trim to the requested number of sessions after the fetch.
+    trading_days = max(1, min(lookback_days, 10))
+    calendar_days = trading_days + 2 * ((trading_days // 5) + 1) + 1
+    start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=calendar_days)
     request = StockBarsRequest(
         symbol_or_symbols=ticker,
         timeframe=TimeFrame.Minute,
@@ -101,6 +106,13 @@ def fetch_intraday_data_alpaca(
     df.index.name = "Timestamp"
     df = df.between_time(MARKET_OPEN, MARKET_CLOSE)
     df = df.dropna(subset=["Close", "Volume"])
+
+    # Keep only the most recent `trading_days` sessions (the padded fetch above
+    # deliberately over-requests to survive weekends and holidays).
+    sessions = sorted(set(df.index.date))
+    if len(sessions) > trading_days:
+        keep = set(sessions[-trading_days:])
+        df = df[[d in keep for d in df.index.date]]
     return df
 
 
